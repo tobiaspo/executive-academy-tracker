@@ -452,6 +452,23 @@ body {
   color: #94a3b8;
 }
 
+/* Add Invitation CTA */
+.add-invitation-cta {
+  margin-bottom: 1rem;
+}
+
+.btn-large {
+  padding: 0.875rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+}
+
+.btn-large:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 8px -1px rgba(59, 130, 246, 0.4);
+}
+
 /* Filters Bar */
 .filters-bar {
   background: white;
@@ -461,15 +478,29 @@ body {
   margin-bottom: 1rem;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   flex-wrap: wrap;
   gap: 1rem;
 }
 
 .filters {
   display: flex;
-  gap: 0.75rem;
+  gap: 1rem;
   flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.filter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
 }
 
 .filters select {
@@ -479,6 +510,23 @@ body {
   font-size: 0.875rem;
   background: white;
   cursor: pointer;
+  min-width: 150px;
+}
+
+.filters select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.btn-clear {
+  color: #ef4444;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.btn-clear:hover {
+  background: #fee2e2;
 }
 
 /* Buttons */
@@ -635,6 +683,10 @@ body {
 
   .filters {
     flex-direction: column;
+  }
+
+  .filter-group {
+    width: 100%;
   }
 
   .filters select {

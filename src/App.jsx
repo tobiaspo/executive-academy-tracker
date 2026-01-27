@@ -90,6 +90,7 @@ export default function App() {
   const [filterRep, setFilterRep] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterCourse, setFilterCourse] = useState('')
+  const [filterCohort, setFilterCohort] = useState('')
 
   const [newInvitation, setNewInvitation] = useState({
     company: '', name: '', role: '', email: '', linkedin: '',
@@ -114,6 +115,14 @@ export default function App() {
     setLoading(false)
   }
 
+  // Get today's date for filtering active/upcoming cohorts
+  const today = new Date().toISOString().split('T')[0]
+
+  // Filter to only active/upcoming cohorts (date >= today)
+  const activeCohorts = useMemo(() => {
+    return cohorts.filter(c => c.date >= today)
+  }, [cohorts, today])
+
   // Calculate metrics
   const metrics = useMemo(() => {
     const confirmed2026 = invitations.filter(i => i.status === 'Confirmed' && i.cohort_date?.startsWith('2026')).length
@@ -122,9 +131,9 @@ export default function App() {
     return { confirmed2026, invited, toContact, goal: 200 }
   }, [invitations])
 
-  // Calculate cohort stats
+  // Calculate cohort stats (only for active/upcoming cohorts)
   const cohortStats = useMemo(() => {
-    return cohorts.map(cohort => {
+    return activeCohorts.map(cohort => {
       const cohortInvitations = invitations.filter(i =>
         i.course === cohort.course && i.region === cohort.region && i.cohort_date === cohort.date
       )
@@ -135,9 +144,9 @@ export default function App() {
         toContact: cohortInvitations.filter(i => i.status === 'To be contacted').length,
       }
     })
-  }, [invitations, cohorts])
+  }, [invitations, activeCohorts])
 
-  // Calculate leaderboard data
+  // Calculate leaderboard data (uses ALL invitations, including past cohorts)
   const leaderboardData = useMemo(() => {
     return salesReps.map(rep => {
       const repInvitations = invitations.filter(i => i.sales_rep === rep.name)
@@ -166,9 +175,10 @@ export default function App() {
       if (filterRep && inv.sales_rep !== filterRep) return false
       if (filterStatus && inv.status !== filterStatus) return false
       if (filterCourse && inv.course !== filterCourse) return false
+      if (filterCohort && inv.cohort_date !== filterCohort) return false
       return true
     })
-  }, [invitations, filterRep, filterStatus, filterCourse])
+  }, [invitations, filterRep, filterStatus, filterCourse, filterCohort])
 
   // Add invitation
   const handleAddInvitation = async () => {
@@ -207,6 +217,14 @@ export default function App() {
   }
 
   const courses = [...new Set(cohorts.map(c => c.course))]
+
+  // Clear all filters
+  const clearFilters = () => {
+    setFilterRep('')
+    setFilterStatus('')
+    setFilterCourse('')
+    setFilterCohort('')
+  }
 
   if (loading) {
     return <div className="loading">Loading...</div>
@@ -270,58 +288,64 @@ export default function App() {
               </div>
             </div>
 
-            {/* Gauges */}
+            {/* Gauges - Only active/upcoming cohorts */}
             <div className="section">
-              <h2>📊 Cohort Status</h2>
-              <div className="gauges-grid">
-                {cohortStats.map(cohort => (
-                  <GaugeChart
-                    key={cohort.id}
-                    value={cohort.confirmed}
-                    max={cohort.seats}
-                    label={cohort.name}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Cohort Table */}
-            <div className="card">
-              <h3>📈 Cohort Details</h3>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Cohort</th>
-                    <th>Region</th>
-                    <th>Seats</th>
-                    <th>Confirmed</th>
-                    <th>Invited</th>
-                    <th>To Contact</th>
-                    <th>Fill %</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <h2>📊 Cohort Status (Active & Upcoming)</h2>
+              {cohortStats.length > 0 ? (
+                <div className="gauges-grid">
                   {cohortStats.map(cohort => (
-                    <tr key={cohort.id}>
-                      <td className="font-medium">{cohort.name}</td>
-                      <td><span className={`region-badge ${cohort.region.toLowerCase()}`}>{cohort.region}</span></td>
-                      <td>{cohort.seats}</td>
-                      <td className="text-green">{cohort.confirmed}</td>
-                      <td className="text-yellow">{cohort.invited}</td>
-                      <td className="text-blue">{cohort.toContact}</td>
-                      <td className={cohort.confirmed / cohort.seats >= 0.8 ? 'text-green' : cohort.confirmed / cohort.seats >= 0.5 ? 'text-yellow' : 'text-red'}>
-                        {cohort.seats > 0 ? ((cohort.confirmed / cohort.seats) * 100).toFixed(0) : 0}%
-                      </td>
-                    </tr>
+                    <GaugeChart
+                      key={cohort.id}
+                      value={cohort.confirmed}
+                      max={cohort.seats}
+                      label={cohort.name}
+                    />
                   ))}
-                </tbody>
-              </table>
+                </div>
+              ) : (
+                <div className="card">
+                  <p style={{ textAlign: 'center', color: '#64748b' }}>No upcoming cohorts. Add cohorts in the Admin panel.</p>
+                </div>
+              )}
             </div>
 
-            {/* Mini Leaderboards */}
-            <div className="leaderboards-grid">
-              <Leaderboard title="2026 Top Performers" data={leaderboard2026} color="green" />
-              <Leaderboard title="All-Time Leaders" data={leaderboardData} color="purple" />
+            {/* Cohort Table - Only active/upcoming cohorts */}
+            <div className="card">
+              <h3>📈 Cohort Details (Active & Upcoming)</h3>
+              {cohortStats.length > 0 ? (
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Cohort</th>
+                      <th>Region</th>
+                      <th>Date</th>
+                      <th>Seats</th>
+                      <th>Confirmed</th>
+                      <th>Invited</th>
+                      <th>To Contact</th>
+                      <th>Fill %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cohortStats.map(cohort => (
+                      <tr key={cohort.id}>
+                        <td className="font-medium">{cohort.name}</td>
+                        <td><span className={`region-badge ${cohort.region.toLowerCase()}`}>{cohort.region}</span></td>
+                        <td className="text-gray">{cohort.date}</td>
+                        <td>{cohort.seats}</td>
+                        <td className="text-green">{cohort.confirmed}</td>
+                        <td className="text-yellow">{cohort.invited}</td>
+                        <td className="text-blue">{cohort.toContact}</td>
+                        <td className={cohort.confirmed / cohort.seats >= 0.8 ? 'text-green' : cohort.confirmed / cohort.seats >= 0.5 ? 'text-yellow' : 'text-red'}>
+                          {cohort.seats > 0 ? ((cohort.confirmed / cohort.seats) * 100).toFixed(0) : 0}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p style={{ textAlign: 'center', color: '#64748b', padding: '1rem' }}>No upcoming cohorts to display.</p>
+              )}
             </div>
           </div>
         )}
@@ -329,25 +353,50 @@ export default function App() {
         {/* Invitations */}
         {activeTab === 'invitations' && (
           <div className="invitations">
+            {/* Add Invitation CTA */}
+            <div className="add-invitation-cta">
+              <button className="btn btn-primary btn-large" onClick={() => setShowAddForm(true)}>
+                ➕ Add New Invitation
+              </button>
+            </div>
+
             {/* Filters */}
             <div className="filters-bar">
               <div className="filters">
-                <select value={filterRep} onChange={(e) => setFilterRep(e.target.value)}>
-                  <option value="">All Sales Reps</option>
-                  {salesReps.map(rep => <option key={rep.id} value={rep.name}>{rep.name}</option>)}
-                </select>
-                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                  <option value="">All Statuses</option>
-                  {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <select value={filterCourse} onChange={(e) => setFilterCourse(e.target.value)}>
-                  <option value="">All Courses</option>
-                  {courses.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <div className="filter-group">
+                  <label className="filter-label">Sales Rep</label>
+                  <select value={filterRep} onChange={(e) => setFilterRep(e.target.value)}>
+                    <option value="">All Sales Reps</option>
+                    {salesReps.map(rep => <option key={rep.id} value={rep.name}>{rep.name}</option>)}
+                  </select>
+                </div>
+                <div className="filter-group">
+                  <label className="filter-label">Status</label>
+                  <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                    <option value="">All Statuses</option>
+                    {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="filter-group">
+                  <label className="filter-label">Course</label>
+                  <select value={filterCourse} onChange={(e) => setFilterCourse(e.target.value)}>
+                    <option value="">All Courses</option>
+                    {courses.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div className="filter-group">
+                  <label className="filter-label">Cohort</label>
+                  <select value={filterCohort} onChange={(e) => setFilterCohort(e.target.value)}>
+                    <option value="">All Cohorts</option>
+                    {cohorts.map(c => <option key={c.id} value={c.date}>{c.name}</option>)}
+                  </select>
+                </div>
               </div>
-              <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
-                ➕ Add Invitation
-              </button>
+              {(filterRep || filterStatus || filterCourse || filterCohort) && (
+                <button className="btn btn-clear" onClick={clearFilters}>
+                  ✕ Clear Filters
+                </button>
+              )}
             </div>
 
             {/* Add Form Modal */}
@@ -395,8 +444,16 @@ export default function App() {
                       </select>
                     </div>
                     <div className="form-group">
-                      <label>Cohort Date</label>
-                      <select value={newInvitation.cohort_date} onChange={(e) => setNewInvitation({...newInvitation, cohort_date: e.target.value})}>
+                      <label>Cohort</label>
+                      <select value={newInvitation.cohort_date} onChange={(e) => {
+                        const selectedCohort = cohorts.find(c => c.date === e.target.value)
+                        setNewInvitation({
+                          ...newInvitation,
+                          cohort_date: e.target.value,
+                          course: selectedCohort?.course || newInvitation.course,
+                          region: selectedCohort?.region || newInvitation.region
+                        })
+                      }}>
                         <option value="">Select...</option>
                         {cohorts.map(c => <option key={c.id} value={c.date}>{c.name} ({c.date})</option>)}
                       </select>
@@ -430,37 +487,48 @@ export default function App() {
                       <th>Name</th>
                       <th>Sales Rep</th>
                       <th>Course</th>
+                      <th>Cohort</th>
                       <th>Region</th>
                       <th>Status</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredInvitations.map(inv => {
-                      const style = statusColors[inv.status] || statusColors['To be contacted']
-                      return (
-                        <tr key={inv.id} style={{ backgroundColor: style.bg }}>
-                          <td className="font-medium">{inv.company}</td>
-                          <td>{inv.name}</td>
-                          <td className="text-gray">{inv.sales_rep}</td>
-                          <td className="text-small">{inv.course}</td>
-                          <td><span className={`region-badge ${inv.region?.toLowerCase()}`}>{inv.region}</span></td>
-                          <td>
-                            <select
-                              value={inv.status}
-                              onChange={(e) => handleStatusChange(inv.id, e.target.value)}
-                              style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}
-                              className="status-select"
-                            >
-                              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                          </td>
-                          <td>
-                            <button className="btn-delete" onClick={() => handleDelete(inv.id)}>🗑️</button>
-                          </td>
-                        </tr>
-                      )
-                    })}
+                    {filteredInvitations.length > 0 ? (
+                      filteredInvitations.map(inv => {
+                        const style = statusColors[inv.status] || statusColors['To be contacted']
+                        const cohortName = cohorts.find(c => c.date === inv.cohort_date)?.name || inv.cohort_date
+                        return (
+                          <tr key={inv.id} style={{ backgroundColor: style.bg }}>
+                            <td className="font-medium">{inv.company}</td>
+                            <td>{inv.name}</td>
+                            <td className="text-gray">{inv.sales_rep}</td>
+                            <td className="text-small">{inv.course}</td>
+                            <td className="text-small">{cohortName}</td>
+                            <td><span className={`region-badge ${inv.region?.toLowerCase()}`}>{inv.region}</span></td>
+                            <td>
+                              <select
+                                value={inv.status}
+                                onChange={(e) => handleStatusChange(inv.id, e.target.value)}
+                                style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}
+                                className="status-select"
+                              >
+                                {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                            </td>
+                            <td>
+                              <button className="btn-delete" onClick={() => handleDelete(inv.id)}>🗑️</button>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                          No invitations found. Click "Add New Invitation" to get started!
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -475,8 +543,8 @@ export default function App() {
         {activeTab === 'leaderboard' && (
           <div className="leaderboards-page">
             <div className="leaderboards-grid-full">
-              <Leaderboard title="Global - All Time" data={leaderboardData} color="purple" />
               <Leaderboard title="2026 Performance" data={leaderboard2026} color="green" />
+              <Leaderboard title="Global - All Time" data={leaderboardData} color="purple" />
               <Leaderboard
                 title="EMEA 2026"
                 data={salesReps.map(rep => {
