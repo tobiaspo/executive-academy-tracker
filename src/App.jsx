@@ -45,7 +45,7 @@ const Leaderboard = ({ title, data, color }) => {
   return (
     <div className="leaderboard">
       <div className="leaderboard-header" style={{ backgroundColor: colorClasses[color] }}>
-        <span>🏆 {title}</span>
+        <span>{title}</span>
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
           <option value="confirmed">By Confirmed</option>
           <option value="contacted">By Contacted</option>
@@ -57,7 +57,7 @@ const Leaderboard = ({ title, data, color }) => {
             <span className={`rank rank-${idx + 1}`}>{idx + 1}</span>
             <span className="rep-name">{rep.name}</span>
             <div className="rep-stats">
-              <span className="confirmed">{rep.confirmed} ✓</span>
+              <span className="confirmed">{rep.confirmed}</span>
               <span className="contacted">{rep.contacted} total</span>
             </div>
           </div>
@@ -97,10 +97,7 @@ export default function App() {
     sales_rep: '', course: '', region: '', cohort_date: '', status: 'To be contacted', notes: ''
   })
 
-  // Fetch data on load
-  useEffect(() => {
-    fetchData()
-  }, [])
+  useEffect(() => { fetchData() }, [])
 
   const fetchData = async () => {
     setLoading(true)
@@ -115,15 +112,9 @@ export default function App() {
     setLoading(false)
   }
 
-  // Get today's date for filtering active/upcoming cohorts
   const today = new Date().toISOString().split('T')[0]
+  const activeCohorts = useMemo(() => cohorts.filter(c => c.date >= today), [cohorts, today])
 
-  // Filter to only active/upcoming cohorts (date >= today)
-  const activeCohorts = useMemo(() => {
-    return cohorts.filter(c => c.date >= today)
-  }, [cohorts, today])
-
-  // Calculate metrics
   const metrics = useMemo(() => {
     const confirmed2026 = invitations.filter(i => i.status === 'Confirmed' && i.cohort_date?.startsWith('2026')).length
     const invited = invitations.filter(i => i.status === 'Invited' && i.cohort_date?.startsWith('2026')).length
@@ -131,45 +122,27 @@ export default function App() {
     return { confirmed2026, invited, toContact, goal: 200 }
   }, [invitations])
 
-  // Calculate cohort stats (only for active/upcoming cohorts)
   const cohortStats = useMemo(() => {
     return activeCohorts.map(cohort => {
-      const cohortInvitations = invitations.filter(i =>
-        i.course === cohort.course && i.region === cohort.region && i.cohort_date === cohort.date
-      )
-      return {
-        ...cohort,
-        confirmed: cohortInvitations.filter(i => i.status === 'Confirmed').length,
-        invited: cohortInvitations.filter(i => i.status === 'Invited').length,
-        toContact: cohortInvitations.filter(i => i.status === 'To be contacted').length,
-      }
+      const ci = invitations.filter(i => i.course === cohort.course && i.region === cohort.region && i.cohort_date === cohort.date)
+      return { ...cohort, confirmed: ci.filter(i => i.status === 'Confirmed').length, invited: ci.filter(i => i.status === 'Invited').length, toContact: ci.filter(i => i.status === 'To be contacted').length }
     })
   }, [invitations, activeCohorts])
 
-  // Calculate leaderboard data (uses ALL invitations, including past cohorts)
   const leaderboardData = useMemo(() => {
     return salesReps.map(rep => {
-      const repInvitations = invitations.filter(i => i.sales_rep === rep.name)
-      return {
-        name: rep.name,
-        confirmed: repInvitations.filter(i => i.status === 'Confirmed').length,
-        contacted: repInvitations.length
-      }
+      const ri = invitations.filter(i => i.sales_rep === rep.name)
+      return { name: rep.name, confirmed: ri.filter(i => i.status === 'Confirmed').length, contacted: ri.length }
     })
   }, [invitations, salesReps])
 
   const leaderboard2026 = useMemo(() => {
     return salesReps.map(rep => {
-      const repInvitations = invitations.filter(i => i.sales_rep === rep.name && i.cohort_date?.startsWith('2026'))
-      return {
-        name: rep.name,
-        confirmed: repInvitations.filter(i => i.status === 'Confirmed').length,
-        contacted: repInvitations.length
-      }
+      const ri = invitations.filter(i => i.sales_rep === rep.name && i.cohort_date?.startsWith('2026'))
+      return { name: rep.name, confirmed: ri.filter(i => i.status === 'Confirmed').length, contacted: ri.length }
     })
   }, [invitations, salesReps])
 
-  // Filtered invitations
   const filteredInvitations = useMemo(() => {
     return invitations.filter(inv => {
       if (filterRep && inv.sales_rep !== filterRep) return false
@@ -180,86 +153,56 @@ export default function App() {
     })
   }, [invitations, filterRep, filterStatus, filterCourse, filterCohort])
 
-  // Add invitation
   const handleAddInvitation = async () => {
     if (!newInvitation.company || !newInvitation.name || !newInvitation.sales_rep) {
       alert('Please fill in Company, Name, and Sales Rep')
       return
     }
     const { error } = await supabase.from('invitations').insert([newInvitation])
-    if (error) {
-      alert('Error adding invitation: ' + error.message)
-    } else {
-      setNewInvitation({
-        company: '', name: '', role: '', email: '', linkedin: '',
-        sales_rep: '', course: '', region: '', cohort_date: '', status: 'To be contacted', notes: ''
-      })
+    if (error) { alert('Error: ' + error.message) } else {
+      setNewInvitation({ company: '', name: '', role: '', email: '', linkedin: '', sales_rep: '', course: '', region: '', cohort_date: '', status: 'To be contacted', notes: '' })
       setShowAddForm(false)
       fetchData()
     }
   }
 
-  // Update status
   const handleStatusChange = async (id, newStatus) => {
     const { error } = await supabase.from('invitations').update({ status: newStatus }).eq('id', id)
-    if (!error) {
-      setInvitations(invitations.map(inv => inv.id === id ? { ...inv, status: newStatus } : inv))
-    }
+    if (!error) setInvitations(invitations.map(inv => inv.id === id ? { ...inv, status: newStatus } : inv))
   }
 
-  // Delete invitation
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this invitation?')) return
     const { error } = await supabase.from('invitations').delete().eq('id', id)
-    if (!error) {
-      setInvitations(invitations.filter(inv => inv.id !== id))
-    }
+    if (!error) setInvitations(invitations.filter(inv => inv.id !== id))
   }
 
   const courses = [...new Set(cohorts.map(c => c.course))]
+  const clearFilters = () => { setFilterRep(''); setFilterStatus(''); setFilterCourse(''); setFilterCohort('') }
 
-  // Clear all filters
-  const clearFilters = () => {
-    setFilterRep('')
-    setFilterStatus('')
-    setFilterCourse('')
-    setFilterCohort('')
-  }
-
-  if (loading) {
-    return <div className="loading">Loading...</div>
-  }
+  if (loading) return <div className="loading">Loading...</div>
 
   return (
     <div className="app">
-      {/* Header */}
       <header className="header">
         <div className="header-content">
           <div>
-            <h1>🎓 Executive Academy Tracker</h1>
+            <h1>Executive Academy Tracker</h1>
             <p>Mentimeter Executive Education Program</p>
           </div>
           <nav className="nav">
-            <button className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveTab('dashboard')}>
-              📊 Dashboard
-            </button>
-            <button className={activeTab === 'invitations' ? 'active' : ''} onClick={() => setActiveTab('invitations')}>
-              📋 Invitations
-            </button>
-            <button className={activeTab === 'leaderboard' ? 'active' : ''} onClick={() => setActiveTab('leaderboard')}>
-              🏆 Leaderboards
-            </button>
+            <button className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
+            <button className={activeTab === 'invitations' ? 'active' : ''} onClick={() => setActiveTab('invitations')}>Invitations</button>
+            <button className={activeTab === 'leaderboard' ? 'active' : ''} onClick={() => setActiveTab('leaderboard')}>Leaderboards</button>
           </nav>
         </div>
       </header>
 
       <main className="main">
-        {/* Dashboard */}
         {activeTab === 'dashboard' && (
           <div className="dashboard">
-            {/* Goal Progress */}
             <div className="card goal-card">
-              <h2>🎯 2026 Goal: 200 Executives Engaged</h2>
+              <h2>2026 Goal: 200 Executives Engaged</h2>
               <div className="goal-content">
                 <div className="progress-section">
                   <div className="progress-header">
@@ -272,60 +215,27 @@ export default function App() {
                   <div className="progress-percent">{((metrics.confirmed2026 / metrics.goal) * 100).toFixed(1)}% complete</div>
                 </div>
                 <div className="stats-grid">
-                  <div className="stat stat-green">
-                    <div className="stat-value">{metrics.confirmed2026}</div>
-                    <div className="stat-label">Confirmed</div>
-                  </div>
-                  <div className="stat stat-yellow">
-                    <div className="stat-value">{metrics.invited}</div>
-                    <div className="stat-label">Invited</div>
-                  </div>
-                  <div className="stat stat-blue">
-                    <div className="stat-value">{metrics.toContact}</div>
-                    <div className="stat-label">To Contact</div>
-                  </div>
+                  <div className="stat stat-green"><div className="stat-value">{metrics.confirmed2026}</div><div className="stat-label">Confirmed</div></div>
+                  <div className="stat stat-yellow"><div className="stat-value">{metrics.invited}</div><div className="stat-label">Invited</div></div>
+                  <div className="stat stat-blue"><div className="stat-value">{metrics.toContact}</div><div className="stat-label">To Contact</div></div>
                 </div>
               </div>
             </div>
 
-            {/* Gauges - Only active/upcoming cohorts */}
             <div className="section">
-              <h2>📊 Cohort Status (Active & Upcoming)</h2>
+              <h2>Cohort Status (Active & Upcoming)</h2>
               {cohortStats.length > 0 ? (
                 <div className="gauges-grid">
-                  {cohortStats.map(cohort => (
-                    <GaugeChart
-                      key={cohort.id}
-                      value={cohort.confirmed}
-                      max={cohort.seats}
-                      label={cohort.name}
-                    />
-                  ))}
+                  {cohortStats.map(cohort => (<GaugeChart key={cohort.id} value={cohort.confirmed} max={cohort.seats} label={cohort.name} />))}
                 </div>
-              ) : (
-                <div className="card">
-                  <p style={{ textAlign: 'center', color: '#64748b' }}>No upcoming cohorts. Add cohorts in the Admin panel.</p>
-                </div>
-              )}
+              ) : (<div className="card"><p style={{ textAlign: 'center', color: '#64748b' }}>No upcoming cohorts.</p></div>)}
             </div>
 
-            {/* Cohort Table - Only active/upcoming cohorts */}
             <div className="card">
-              <h3>📈 Cohort Details (Active & Upcoming)</h3>
+              <h3>Cohort Details (Active & Upcoming)</h3>
               {cohortStats.length > 0 ? (
                 <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Cohort</th>
-                      <th>Region</th>
-                      <th>Date</th>
-                      <th>Seats</th>
-                      <th>Confirmed</th>
-                      <th>Invited</th>
-                      <th>To Contact</th>
-                      <th>Fill %</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Cohort</th><th>Region</th><th>Date</th><th>Seats</th><th>Confirmed</th><th>Invited</th><th>To Contact</th><th>Fill %</th></tr></thead>
                   <tbody>
                     {cohortStats.map(cohort => (
                       <tr key={cohort.id}>
@@ -343,24 +253,17 @@ export default function App() {
                     ))}
                   </tbody>
                 </table>
-              ) : (
-                <p style={{ textAlign: 'center', color: '#64748b', padding: '1rem' }}>No upcoming cohorts to display.</p>
-              )}
+              ) : (<p style={{ textAlign: 'center', color: '#64748b', padding: '1rem' }}>No upcoming cohorts to display.</p>)}
             </div>
           </div>
         )}
 
-        {/* Invitations */}
         {activeTab === 'invitations' && (
           <div className="invitations">
-            {/* Add Invitation CTA */}
             <div className="add-invitation-cta">
-              <button className="btn btn-primary btn-large" onClick={() => setShowAddForm(true)}>
-                ➕ Add New Invitation
-              </button>
+              <button className="btn btn-primary btn-large" onClick={() => setShowAddForm(true)}>+ Add New Invitation</button>
             </div>
 
-            {/* Filters */}
             <div className="filters-bar">
               <div className="filters">
                 <div className="filter-group">
@@ -393,81 +296,53 @@ export default function App() {
                 </div>
               </div>
               {(filterRep || filterStatus || filterCourse || filterCohort) && (
-                <button className="btn btn-clear" onClick={clearFilters}>
-                  ✕ Clear Filters
-                </button>
+                <button className="btn btn-clear" onClick={clearFilters}>Clear Filters</button>
               )}
             </div>
 
-            {/* Add Form Modal */}
             {showAddForm && (
               <div className="modal-overlay" onClick={() => setShowAddForm(false)}>
                 <div className="modal" onClick={(e) => e.stopPropagation()}>
-                  <h2>➕ Add New Invitation</h2>
+                  <h2>Add New Invitation</h2>
                   <div className="form-grid">
-                    <div className="form-group">
-                      <label>Company *</label>
-                      <input type="text" value={newInvitation.company} onChange={(e) => setNewInvitation({...newInvitation, company: e.target.value})} placeholder="e.g., Siemens" />
-                    </div>
-                    <div className="form-group">
-                      <label>Name *</label>
-                      <input type="text" value={newInvitation.name} onChange={(e) => setNewInvitation({...newInvitation, name: e.target.value})} placeholder="e.g., John Smith" />
-                    </div>
-                    <div className="form-group">
-                      <label>Role</label>
-                      <input type="text" value={newInvitation.role} onChange={(e) => setNewInvitation({...newInvitation, role: e.target.value})} placeholder="e.g., VP Operations" />
-                    </div>
-                    <div className="form-group">
-                      <label>Email</label>
-                      <input type="email" value={newInvitation.email} onChange={(e) => setNewInvitation({...newInvitation, email: e.target.value})} placeholder="e.g., john@company.com" />
-                    </div>
-                    <div className="form-group">
-                      <label>Sales Rep *</label>
+                    <div className="form-group"><label>Company *</label><input type="text" value={newInvitation.company} onChange={(e) => setNewInvitation({...newInvitation, company: e.target.value})} placeholder="e.g., Siemens" /></div>
+                    <div className="form-group"><label>Name *</label><input type="text" value={newInvitation.name} onChange={(e) => setNewInvitation({...newInvitation, name: e.target.value})} placeholder="e.g., John Smith" /></div>
+                    <div className="form-group"><label>Role</label><input type="text" value={newInvitation.role} onChange={(e) => setNewInvitation({...newInvitation, role: e.target.value})} placeholder="e.g., VP Operations" /></div>
+                    <div className="form-group"><label>Email</label><input type="email" value={newInvitation.email} onChange={(e) => setNewInvitation({...newInvitation, email: e.target.value})} placeholder="e.g., john@company.com" /></div>
+                    <div className="form-group"><label>Sales Rep *</label>
                       <select value={newInvitation.sales_rep} onChange={(e) => setNewInvitation({...newInvitation, sales_rep: e.target.value})}>
                         <option value="">Select...</option>
                         {salesReps.map(rep => <option key={rep.id} value={rep.name}>{rep.name}</option>)}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label>Course</label>
+                    <div className="form-group"><label>Course</label>
                       <select value={newInvitation.course} onChange={(e) => setNewInvitation({...newInvitation, course: e.target.value})}>
                         <option value="">Select...</option>
                         {courses.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label>Region</label>
+                    <div className="form-group"><label>Region</label>
                       <select value={newInvitation.region} onChange={(e) => setNewInvitation({...newInvitation, region: e.target.value})}>
                         <option value="">Select...</option>
                         <option value="EMEA">EMEA</option>
                         <option value="NAMER">NAMER</option>
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label>Cohort</label>
+                    <div className="form-group"><label>Cohort</label>
                       <select value={newInvitation.cohort_date} onChange={(e) => {
-                        const selectedCohort = cohorts.find(c => c.date === e.target.value)
-                        setNewInvitation({
-                          ...newInvitation,
-                          cohort_date: e.target.value,
-                          course: selectedCohort?.course || newInvitation.course,
-                          region: selectedCohort?.region || newInvitation.region
-                        })
+                        const sc = cohorts.find(c => c.date === e.target.value)
+                        setNewInvitation({...newInvitation, cohort_date: e.target.value, course: sc?.course || newInvitation.course, region: sc?.region || newInvitation.region})
                       }}>
                         <option value="">Select...</option>
                         {cohorts.map(c => <option key={c.id} value={c.date}>{c.name} ({c.date})</option>)}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label>Status</label>
+                    <div className="form-group"><label>Status</label>
                       <select value={newInvitation.status} onChange={(e) => setNewInvitation({...newInvitation, status: e.target.value})}>
                         {statuses.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
-                    <div className="form-group">
-                      <label>Notes</label>
-                      <input type="text" value={newInvitation.notes} onChange={(e) => setNewInvitation({...newInvitation, notes: e.target.value})} placeholder="Optional notes..." />
-                    </div>
+                    <div className="form-group"><label>Notes</label><input type="text" value={newInvitation.notes} onChange={(e) => setNewInvitation({...newInvitation, notes: e.target.value})} placeholder="Optional notes..." /></div>
                   </div>
                   <div className="modal-actions">
                     <button className="btn" onClick={() => setShowAddForm(false)}>Cancel</button>
@@ -477,98 +352,58 @@ export default function App() {
               </div>
             )}
 
-            {/* Table */}
             <div className="card">
               <div className="table-container">
                 <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Company</th>
-                      <th>Name</th>
-                      <th>Sales Rep</th>
-                      <th>Course</th>
-                      <th>Cohort</th>
-                      <th>Region</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
+                  <thead><tr><th>Company</th><th>Name</th><th>Sales Rep</th><th>Course</th><th>Cohort</th><th>Region</th><th>Status</th><th>Actions</th></tr></thead>
                   <tbody>
-                    {filteredInvitations.length > 0 ? (
-                      filteredInvitations.map(inv => {
-                        const style = statusColors[inv.status] || statusColors['To be contacted']
-                        const cohortName = cohorts.find(c => c.date === inv.cohort_date)?.name || inv.cohort_date
-                        return (
-                          <tr key={inv.id} style={{ backgroundColor: style.bg }}>
-                            <td className="font-medium">{inv.company}</td>
-                            <td>{inv.name}</td>
-                            <td className="text-gray">{inv.sales_rep}</td>
-                            <td className="text-small">{inv.course}</td>
-                            <td className="text-small">{cohortName}</td>
-                            <td><span className={`region-badge ${inv.region?.toLowerCase()}`}>{inv.region}</span></td>
-                            <td>
-                              <select
-                                value={inv.status}
-                                onChange={(e) => handleStatusChange(inv.id, e.target.value)}
-                                style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}
-                                className="status-select"
-                              >
-                                {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                              </select>
-                            </td>
-                            <td>
-                              <button className="btn-delete" onClick={() => handleDelete(inv.id)}>🗑️</button>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                          No invitations found. Click "Add New Invitation" to get started!
-                        </td>
-                      </tr>
-                    )}
+                    {filteredInvitations.length > 0 ? filteredInvitations.map(inv => {
+                      const style = statusColors[inv.status] || statusColors['To be contacted']
+                      const cn = cohorts.find(c => c.date === inv.cohort_date)?.name || inv.cohort_date
+                      return (
+                        <tr key={inv.id} style={{ backgroundColor: style.bg }}>
+                          <td className="font-medium">{inv.company}</td>
+                          <td>{inv.name}</td>
+                          <td className="text-gray">{inv.sales_rep}</td>
+                          <td className="text-small">{inv.course}</td>
+                          <td className="text-small">{cn}</td>
+                          <td><span className={`region-badge ${inv.region?.toLowerCase()}`}>{inv.region}</span></td>
+                          <td>
+                            <select value={inv.status} onChange={(e) => handleStatusChange(inv.id, e.target.value)} style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }} className="status-select">
+                              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </td>
+                          <td><button className="btn-delete" onClick={() => handleDelete(inv.id)}>x</button></td>
+                        </tr>
+                      )
+                    }) : (<tr><td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>No invitations found. Click "Add New Invitation" to get started!</td></tr>)}
                   </tbody>
                 </table>
               </div>
-              <div className="table-footer">
-                Showing {filteredInvitations.length} of {invitations.length} invitations
-              </div>
+              <div className="table-footer">Showing {filteredInvitations.length} of {invitations.length} invitations</div>
             </div>
           </div>
         )}
 
-        {/* Leaderboards */}
         {activeTab === 'leaderboard' && (
           <div className="leaderboards-page">
             <div className="leaderboards-grid-full">
               <Leaderboard title="2026 Performance" data={leaderboard2026} color="green" />
               <Leaderboard title="Global - All Time" data={leaderboardData} color="purple" />
-              <Leaderboard
-                title="EMEA 2026"
-                data={salesReps.map(rep => {
-                  const repInv = invitations.filter(i => i.sales_rep === rep.name && i.region === 'EMEA' && i.cohort_date?.startsWith('2026'))
-                  return { name: rep.name, confirmed: repInv.filter(i => i.status === 'Confirmed').length, contacted: repInv.length }
-                })}
-                color="blue"
-              />
-              <Leaderboard
-                title="NAMER 2026"
-                data={salesReps.map(rep => {
-                  const repInv = invitations.filter(i => i.sales_rep === rep.name && i.region === 'NAMER' && i.cohort_date?.startsWith('2026'))
-                  return { name: rep.name, confirmed: repInv.filter(i => i.status === 'Confirmed').length, contacted: repInv.length }
-                })}
-                color="orange"
-              />
+              <Leaderboard title="EMEA 2026" data={salesReps.map(rep => {
+                const ri = invitations.filter(i => i.sales_rep === rep.name && i.region === 'EMEA' && i.cohort_date?.startsWith('2026'))
+                return { name: rep.name, confirmed: ri.filter(i => i.status === 'Confirmed').length, contacted: ri.length }
+              })} color="blue" />
+              <Leaderboard title="NAMER 2026" data={salesReps.map(rep => {
+                const ri = invitations.filter(i => i.sales_rep === rep.name && i.region === 'NAMER' && i.cohort_date?.startsWith('2026'))
+                return { name: rep.name, confirmed: ri.filter(i => i.status === 'Confirmed').length, contacted: ri.length }
+              })} color="orange" />
             </div>
           </div>
         )}
       </main>
 
-      <footer className="footer">
-        <p>Mentimeter Executive Academy Tracker • Built with ❤️</p>
-      </footer>
+      <footer className="footer"><p>Mentimeter Executive Academy Tracker</p></footer>
     </div>
   )
 }
